@@ -19,41 +19,37 @@ const allowedOrigins = (process.env.FRONTEND_URL ||
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // allow requests with no origin (Postman, mobile apps, curl)
     if (!origin) return callback(null, true);
 
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       console.log('❌ Blocked by CORS:', origin);
-      callback(new Error('Not allowed by CORS'));
+      callback(null, false); // don't crash
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
 };
 
-// Apply CORS
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // ⭐ handle preflight globally
+app.options('*', cors(corsOptions));
 
 /* =========================
-   MANUAL HEADERS (Vercel FIX)
+   MANUAL HEADERS (Vercel SAFETY)
 ========================= */
 app.use((req, res, next) => {
   const origin = req.headers.origin;
 
   if (allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Origin', origin);
   }
 
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
+    return res.status(200).end();
   }
 
   next();
@@ -66,13 +62,40 @@ app.use(express.json());
 app.use(helmet());
 
 /* =========================
-   DEBUG (optional)
+   DATABASE (SERVERLESS SAFE)
 ========================= */
-// Uncomment if needed
-// app.use((req, res, next) => {
-//   console.log('Origin:', req.headers.origin);
-//   next();
-// });
+
+let isConnected = false;
+
+const connectDB = async () => {
+  if (isConnected) return;
+
+  try {
+    const conn = await mongoose.connect(process.env.MONGODB_URI);
+    isConnected = conn.connections[0].readyState;
+    console.log('✅ MongoDB connected');
+  } catch (err) {
+    console.error('❌ MongoDB error:', err);
+    throw err;
+  }
+};
+
+// Ensure DB before handling routes
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    res.status(500).json({ message: 'Database connection failed' });
+  }
+});
+
+/* =========================
+   TEST ROUTE
+========================= */
+app.get('/', (req, res) => {
+  res.json({ message: 'API is working 🚀' });
+});
 
 /* =========================
    ROUTES
@@ -88,24 +111,13 @@ app.use('/api/qr', require('./routes/qr'));
    ERROR HANDLER
 ========================= */
 app.use((err, req, res, next) => {
-  console.error('🔥 Error:', err.message);
+  console.error('🔥 ERROR:', err.stack);
   res.status(500).json({
     message: err.message || 'Something went wrong'
   });
 });
 
 /* =========================
-   DATABASE + SERVER START
+   EXPORT (IMPORTANT)
 ========================= */
-const PORT = process.env.PORT || 5000;
-
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => {
-    console.log('✅ MongoDB connected');
-  })
-  .catch(err => {
-    console.error('❌ MongoDB connection error:', err);
-    process.exit(1);
-  });
-
 module.exports = app;
