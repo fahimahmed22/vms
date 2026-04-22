@@ -7,6 +7,10 @@ const helmet = require('helmet');
 
 const app = express();
 
+if (!process.env.MONGODB_URI) {
+  console.error('❌ MONGODB_URI is not defined. Set it in Vercel Environment Variables.');
+}
+
 /* =========================
    CORS CONFIGURATION
 ========================= */
@@ -70,8 +74,15 @@ let isConnected = false;
 const connectDB = async () => {
   if (isConnected) return;
 
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    const err = new Error('MONGODB_URI is required but not set.');
+    console.error('❌', err.message);
+    throw err;
+  }
+
   try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI);
+    const conn = await mongoose.connect(uri);
     isConnected = conn.connections[0].readyState;
     console.log('✅ MongoDB connected');
   } catch (err) {
