@@ -131,4 +131,12 @@ app.use((err, req, res, next) => {
 /* =========================
    EXPORT (IMPORTANT)
 ========================= */
+// Only start server if not required as a module (for local/Render hosting)
+if (require.main === module) {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
 module.exports = app;
